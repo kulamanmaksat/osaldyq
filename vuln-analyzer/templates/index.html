@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="kk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ЖИ қолданатын код осалдықтарын талдаушы</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .card {
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .score-circle {
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            background-color: #ffc107;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 20px auto;
+            font-size: 2.5em;
+            color: white;
+            font-weight: bold;
+        }
+        .vulnerability-item {
+            padding: 10px 15px;
+            margin: 5px 0;
+            border-radius: 5px;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+        }
+        .recommendation-item {
+            padding: 10px 15px;
+            margin: 5px 0;
+            border-radius: 5px;
+            background-color: #e9ecef;
+        }
+        textarea {
+            font-family: monospace;
+            resize: vertical;
+        }
+        .btn-primary {
+            background-color: #007bff;
+            border: none;
+            padding: 10px 20px;
+        }
+        .btn-secondary {
+            background-color: #6c757d;
+            border: none;
+            padding: 10px 20px;
+        }
+        .file-input {
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center mb-4">ЖИ қолданатын код осалдықтарын талдаушы</h1>
+        
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Кодты енгізу</h5>
+                        <textarea class="form-control mb-3" id="codeInput" rows="15"></textarea>
+                        <button class="btn btn-primary" onclick="analyzeCode()">Талдау</button>
+                        
+                        <div class="file-input">
+                            <h5>Файлды жүктеу</h5>
+                            <div class="input-group">
+                                <input type="file" class="form-control" id="fileInput" name="file">
+                                <button class="btn btn-secondary" type="button" onclick="analyzeFile()">Жүктеу және талдау</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Талдау нәтижелері</h5>
+                        <div id="results">
+                            <div class="score-circle">
+                                <span id="score">-</span>%
+                            </div>
+                            
+                            <div class="text-center mb-4">
+                                <h4 id="finalScore">Қорытынды баға: -</h4>
+                                <p id="riskLevel">Қауіп деңгейі: -</p>
+                                <p id="confidence">Модель сенімділігі: -</p>
+                            </div>
+                            
+                            <div class="vulnerabilities mb-4">
+                                <h5>Табылған осалдықтар:</h5>
+                                <div id="vulnerabilitiesList"></div>
+                            </div>
+                            
+                            <div class="recommendations">
+                                <h5>Осалдықтарды жою бойынша ұсыныстар:</h5>
+                                <div id="recommendationsList"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function analyzeCode() {
+            const code = document.getElementById('codeInput').value;
+            fetch('/analyze', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ code: code })
+            })
+            .then(response => response.json())
+            .then(data => updateResults(data))
+            .catch(error => console.error('Қате:', error));
+        }
+
+        function analyzeFile() {
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            if (!file) {
+                alert('Файлды таңдаңыз');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            fetch('/analyze_file', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => updateResults(data))
+            .catch(error => console.error('Қате:', error));
+        }
+
+        function updateResults(data) {
+            document.getElementById('score').textContent = data.score;
+            document.getElementById('finalScore').textContent = `Қорытынды баға: ${data.score}%`;
+            document.getElementById('riskLevel').textContent = `Қауіп деңгейі: ${translateRisk(data.risk)}`;
+            document.getElementById('confidence').textContent = `Модель сенімділігі: ${data.score}%`;
+
+            const vulnList = document.getElementById('vulnerabilitiesList');
+            vulnList.innerHTML = '';
+            data.vulnerabilities.forEach(vuln => {
+                const div = document.createElement('div');
+                div.className = 'vulnerability-item';
+                div.textContent = translateVulnerability(vuln);
+                vulnList.appendChild(div);
+            });
+
+            const recomList = document.getElementById('recommendationsList');
+            recomList.innerHTML = '';
+            const recommendations = [
+                'Арнайы таңбаларға енгізілген деректерді тексеріңіз',
+                'SQL үшін prepared statements қолданыңыз',
+                'Буфер толып кетуін тексеріп, қауіпсіз функцияларды қолданыңыз',
+                'Кітапханаларды соңғы нұсқаларына дейін жаңартыңыз'
+            ];
+            recommendations.forEach(rec => {
+                const div = document.createElement('div');
+                div.className = 'recommendation-item';
+                div.textContent = rec;
+                recomList.appendChild(div);
+            });
+
+            const scoreCircle = document.querySelector('.score-circle');
+            if (data.score > 80) {
+                scoreCircle.style.backgroundColor = '#dc3545'; // Жоғары қауіп үшін қызыл
+            } else if (data.score > 60) {
+                scoreCircle.style.backgroundColor = '#ffc107'; // Орташа қауіп үшін сары
+            } else {
+                scoreCircle.style.backgroundColor = '#28a745'; // Төмен қауіп үшін жасыл
+            }
+        }
+
+        function translateRisk(risk) {
+            const translations = {
+                'Высокий': 'Жоғары',
+                'Средний': 'Орташа',
+                'Низкий': 'Төмен'
+            };
+            return translations[risk] || risk;
+        }
+
+        function translateVulnerability(vuln) {
+            const translations = {
+                'Обнаружена SQL-инъекция - используйте параметризованные запросы': 
+                    'SQL-инъекция табылды - параметрленген сұраныстарды қолданыңыз',
+                'Обнаружена XSS-уязвимость - используйте безопасные методы вставки контента': 
+                    'XSS-осалдық табылды - контентті қауіпсіз енгізу әдістерін қолданыңыз',
+                'Обнаружена инъекция команд - используйте subprocess.run с shell=False': 
+                    'Команда инъекциясы табылды - shell=False параметрімен subprocess.run қолданыңыз',
+                'Обнаружена уязвимость path traversal - используйте os.path.basename': 
+                    'Path traversal осалдығы табылды - os.path.basename қолданыңыз',
+                'Обнаружены захардкоженные учетные данные - используйте переменные окружения': 
+                    'Қатты кодталған тіркелгі деректері табылды - орта айнымалыларын қолданыңыз',
+                'Обнаружена небезопасная десериализация - используйте json или yaml.safe_load': 
+                    'Қауіпсіз емес десериализация табылды - json немесе yaml.safe_load қолданыңыз',
+                'Обнаружены устаревшие криптографические методы - используйте современные алгоритмы': 
+                    'Ескірген криптографиялық әдістер табылды - заманауи алгоритмдерді қолданыңыз',
+                'Потенциальная race condition - используйте блокировки или транзакции': 
+                    'Ықтимал race condition - блоктау немесе транзакцияларды қолданыңыз',
+                'Потенциальное переполнение буфера - проверяйте размеры данных': 
+                    'Ықтимал буфер толып кетуі - деректер өлшемін тексеріңіз',
+                'Небезопасная валидация входных данных - используйте проверку типов и санитизацию': 
+                    'Қауіпсіз емес кіріс деректерді тексеру - түрлерді тексеру және санитизацияны қолданыңыз'
+            };
+            return translations[vuln] || vuln;
+        }
+    </script>
+</body>
+</html> 
